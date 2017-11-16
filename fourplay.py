@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QGridLayout, QMessageBox, QSizePolicy
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QComboBox, QGridLayout, QMessageBox, QSizePolicy, QVBoxLayout
 from PyQt5.QtGui import QPainter, QBrush, QPen, QPalette
 from PyQt5.QtCore import Qt, QPoint, QSize
 import unittest
@@ -6,11 +6,10 @@ import random
 import sys
 
 
-class FourPlay:
+class FourPlay(dict):
     class Disc:
-        def __init__(self, row, column, frontier):
+        def __init__(self, row, column):
             self.row, self.column = row, column
-            self.frontier = frontier
             self.delegate = None
             self.player = None
             self.marked = False
@@ -21,20 +20,6 @@ class FourPlay:
 
         def __str__(self):
             return str(self.player) if self.player is not None else "☐"
-
-        def set(self, player, notify=False):
-            self.player = player
-            self.frontier.increase(self.column, notify)
-            self.notify(notify)
-
-        def clear(self, notify=False):
-            self.player = None
-            self.frontier.decrease(self.column, notify)
-            self.notify(notify)
-
-        def playable(self):
-            retval = self in self.frontier
-            return retval
 
         def mark(self, notify=False):
             self.marked = True
@@ -52,29 +37,16 @@ class FourPlay:
             else:
                 return None
 
-        def crawl(self, fourPlay, direction, player, notify=False):
+        def crawl(self, fourPlay, direction, player, mark=False):
             if self.player == player:
-                if notify is True:
+                if mark is True:
                     self.mark(True)
                 neighbor = self.neighbor(fourPlay, direction)
                 if neighbor is not None:
-                    return neighbor.crawl(fourPlay, direction, player, notify) + 1
+                    return neighbor.crawl(fourPlay, direction, player, mark) + 1
                 else:
                     return 1
             return 0
-
-        def score(self, fourPlay, player, notify=False):
-            for forward in [(+1, 0), (0, +1), (+1, +1), (+1, -1)]:
-                rearward = -forward[0], -forward[1]
-                numConnected = self.crawl(fourPlay, forward, player) + self.crawl(fourPlay, rearward, player) - 1
-                if numConnected >= 4:
-                    if notify is True:
-                        self.crawl(fourPlay, forward, player, True)
-                        self.crawl(fourPlay, rearward, player, True)
-                    return 1
-            if len(list(self.frontier)) == 0:
-                return 0
-            return None
 
         def reset(self, notify=False):
             self.player = None
@@ -82,59 +54,52 @@ class FourPlay:
             self.rank = 0
             self.notify(notify)
 
-    class Frontier:
-        def __init__(self, fourPlay):
-            self.fourPlay = fourPlay
-            self.frontier = []
-
-        def __contains__(self, disc):
-            return disc == self.frontier[disc.column] if disc is not None else False
-
-        def __getitem__(self, column):
-            return self.frontier[column]
-
-        def __iter__(self):
-            frontier = list(filter(lambda disc: disc is not None, self.frontier))
-            random.shuffle(frontier)
-            return frontier.__iter__()
+    class Frontier(list):
+        def __init__(self):
+            super().__init__()
 
         def __str__(self):
             string = ""
-            for disc in self.frontier:
+            for disc in self:
                 string += str(disc.row) if disc is not None else "_"
             return string
 
-        def increase(self, column, notify=False):
-            disc = self.frontier[column]
+        def increase(self, fourPlay, column, notify=False):
+            disc = self[column]
             if disc is None:
                 return
-            discAbove = disc.neighbor(self.fourPlay, (-1, 0))
-            self.frontier[column] = discAbove
+            discAbove = disc.neighbor(fourPlay, (-1, 0))
+            self[column] = discAbove
             if discAbove is not None:
                 discAbove.notify(notify)
 
-        def decrease(self, column, notify=False):
-            disc = self.frontier[column]
+        def decrease(self, fourPlay, column, notify=False):
+            disc = self[column]
             if disc is None:
-                topRowDisc = self.fourPlay[0, column]
-                self.frontier[column] = topRowDisc
+                topRowDisc = fourPlay[0, column]
+                self[column] = topRowDisc
                 topRowDisc.notify(notify)
                 return
-            discBelow = disc.neighbor(self.fourPlay, (+1, 0))
-            self.frontier[column] = discBelow
+            discBelow = disc.neighbor(fourPlay, (+1, 0))
+            self[column] = discBelow
             if discBelow is not None:
                 discBelow.notify(notify)
 
-        def reset(self):
-            self.frontier = []
-            for column in range(self.fourPlay.columns):
-                for row in reversed(range(self.fourPlay.rows)):
-                    disc = self.fourPlay[row, column]
-                    if disc.player is None:
-                        self.frontier.append(disc)
+        def choices(self, shuffle=True):
+            choices = list(filter(lambda disc: disc is not None, self))
+            if shuffle is True:
+                random.shuffle(choices)
+            return choices
+
+        def reset(self, fourPlay):
+            self[:] = [None] * fourPlay.columns
+            for column in range(fourPlay.columns):
+                for row in range(fourPlay.rows):
+                    disc = fourPlay[row, column]
+                    if disc.player is None or row == fourPlay.rows:
+                        self[column] = disc
+                    else:
                         break
-                else:
-                    self.frontier.append(None)
 
     class Player:
         def __init__(self, symbol):
@@ -146,24 +111,24 @@ class FourPlay:
         def play(self, fourPlay, opponent, column):
             return 0, fourPlay.frontier[column]
 
-    class AI(Player):
+    class BreadthFirstSearchAI(Player):
         def play(self, fourPlay, opnt, selfBestResult=(-2, None), opntBestResult=(+2, None), recursionLevel=1):
             recursionLimit = 8
-            for disc in fourPlay.frontier:
-                disc.set(self)
-                selfResult = (disc.score(fourPlay, self), disc)
+            for disc in fourPlay.frontier.choices(shuffle=True):
+                fourPlay.set(disc, self)
+                selfResult = (fourPlay.score(disc), disc)
                 if selfResult[0] is None:
                     if recursionLevel < recursionLimit:
                         subtreeSelfBestResult = (-selfBestResult[0], selfBestResult[1])
                         subtreeOpntBestResult = (-opntBestResult[0], opntBestResult[1])
-                        opntResult = FourPlay.AI.play(opnt, fourPlay, self, subtreeOpntBestResult,
+                        opntResult = FourPlay.BreadthFirstSearchAI.play(opnt, fourPlay, self, subtreeOpntBestResult,
                                                       subtreeSelfBestResult, recursionLevel + 1)
                         selfResult = (-opntResult[0], selfResult[1])
                     else:
                         selfResult = (-1 / recursionLimit, selfResult[1])
                 else:
                     selfResult = (selfResult[0] / recursionLevel, selfResult[1])
-                disc.clear()
+                fourPlay.clear(disc)
 
                 if selfResult[0] > selfBestResult[0]:
                     selfBestResult = selfResult
@@ -172,28 +137,25 @@ class FourPlay:
 
             return selfBestResult
 
+    class MonteCarloSearchAI(BreadthFirstSearchAI):
+        pass
+
     def __init__(self, rows, columns):
+        super().__init__()
         self.rows, self.columns = rows, columns
-        self.ai = FourPlay.AI("☓")
+        self.ai = FourPlay.Player("☓")
         self.player = FourPlay.Player("◯")
-        self.frontier = FourPlay.Frontier(self)
-        self.discs = {}
+        self.frontier = FourPlay.Frontier()
         for row in range(self.rows):
             for column in range(self.columns):
-                disc = FourPlay.Disc(row, column, self.frontier)
-                self.discs[row, column] = disc
-        self.frontier.reset()
-
-    def __contains__(self, row_column):
-        return row_column in self.discs
-
-    def __getitem__(self, row_column):
-        return self.discs[row_column]
+                disc = FourPlay.Disc(row, column)
+                self[row, column] = disc
+        self.frontier.reset(self)
 
     def __iter__(self):
-        return self.discs.values().__iter__()
+        return iter(self.values())
 
-    def __str__(self):
+    def __repr__(self):
         string = ""
         for row in range(self.rows):
             for column in range(self.columns):
@@ -201,63 +163,90 @@ class FourPlay:
             string += "\n"
         return string
 
-    @classmethod
-    def create(FourPlay, symbols):
-        fourPlay = FourPlay(len(symbols), len(symbols[0]))
+    def build(self, symbols):
         for row, symbols_row in enumerate(symbols):
             for column, symbol in enumerate(symbols_row):
-                disc = fourPlay[row, column]
-                if symbol == fourPlay.ai.symbol:
-                    disc.player = fourPlay.ai
-                if symbol == fourPlay.player.symbol:
-                    disc.player = fourPlay.player
-        fourPlay.frontier.reset()
-        return fourPlay
+                disc = self[row, column]
+                if symbol == self.player.symbol:
+                    disc.player = self.player
+                elif symbol == self.ai.symbol:
+                    disc.player = self.ai
+                else:
+                    disc.player = None
+        self.frontier.reset(self)
 
-    def playRound(self, column):
+    def round(self, column):
         _, playerDisc = self.player.play(self, self.ai, column)
-        playerDisc.set(self.player, True)
-        playerScore = playerDisc.score(self, self.player, True)
+        self.set(playerDisc, self.player, True)
+        playerScore = self.score(playerDisc, True)
         if playerScore is not None:
             return playerScore
 
         _, aiDisc = self.ai.play(self, self.player)
-        aiDisc.set(self.ai, True)
-        aiScore = aiDisc.score(self, self.ai, True)
+        self.set(aiDisc, self.ai, True)
+        aiScore = self.score(aiDisc, True)
         if aiScore is not None:
             return -aiScore
+        return None
+
+    def set(self, disc, player, notify=False):
+        disc.player = player
+        self.frontier.increase(self, disc.column, notify)
+        disc.notify(notify)
+
+    def clear(self, disc, notify=False):
+        disc.player = None
+        self.frontier.decrease(self, disc.column, notify)
+        disc.notify(notify)
+
+    def score(self, disc, mark=False):
+        for forward in [(+1, 0), (0, +1), (+1, +1), (+1, -1)]:
+            rearward = -forward[0], -forward[1]
+            connected = disc.crawl(self, forward, disc.player) + disc.crawl(self, rearward, disc.player) - 1
+            if connected >= 4:
+                if mark is True:
+                    disc.crawl(self, forward, disc.player, True)
+                    disc.crawl(self, rearward, disc.player, True)
+                return 1
+        if len(self.frontier.choices()) == 0:
+            return 0
         return None
 
     def reset(self, notify=True):
         for disc in self:
             disc.reset(False)
-        self.frontier.reset()
+        self.frontier.reset(self)
         for disc in self:
             disc.notify(notify)
 
 
 class QFourPlay(QWidget):
     class QDiscButton(QPushButton):
-        def __init__(self, playerColorMap):
-            super(QFourPlay.QDiscButton, self).__init__()
-            self.playerColorMap = playerColorMap
+        ColorMap = {type(None): (QPalette.Dark, QPalette.Background),
+                    FourPlay.Player: (QPalette.Highlight, QPalette.Highlight),
+                    FourPlay.BreadthFirstSearchAI: (QPalette.Dark, QPalette.Dark),
+                    FourPlay.MonteCarloSearchAI: (QPalette.Light, QPalette.Light)}
+
+        def __init__(self, qFourPlay):
+            super(QFourPlay.QDiscButton, self).__init__(qFourPlay)
+            self.qFourPlay = qFourPlay
+            self.highlight = False
+            self.playable = False
             self.marked = False
             self.color = None
-            self.playable = False
-            self.highlight = False
             self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
             self.setFocusPolicy(Qt.NoFocus)
             self.setMouseTracking(True)
 
         def updateEvent(self, disc):
             self.marked = disc.marked
-            self.color = self.playerColorMap[disc.player]
-            self.playable = disc.playable()
+            self.color = self.ColorMap[type(disc.player)]
+            self.playable = disc in self.qFourPlay.fourPlay.frontier
             self.update()
 
-        def clickEvent(self, clicked, disc):
+        def clickEvent(self, disc):
             self.leaveEvent()
-            self.parent().playRound(disc.column)
+            self.qFourPlay.playRound(disc.column)
             self.enterEvent()
             return
 
@@ -281,14 +270,14 @@ class QFourPlay(QWidget):
             pen.setJoinStyle(Qt.RoundJoin)
             pen.setCapStyle(Qt.RoundCap)
 
-            center = QPoint(self.width() / 2, self.height() / 2)
+            center = QPoint(self.width() // 2, self.height() // 2)
             radius = 0.45 * min(self.width(), self.height())
 
             pen.setColor(self.palette().color(self.color[0]))
             brush.setColor(self.palette().color(self.color[1]))
             if self.highlight is True:
                 pen.setColor(self.palette().color(QPalette.Highlight))
-            pen.setWidth(0.15 * radius)
+            pen.setWidth(round(0.15 * radius))
             painter.setBrush(brush)
             painter.setPen(pen)
             painter.drawEllipse(center, radius, radius)
@@ -305,6 +294,9 @@ class QFourPlay(QWidget):
         def sizeHint(self):
             return QSize(40, 40)
 
+    AIs = [("Breadth First Search AI", FourPlay.BreadthFirstSearchAI),
+           ("Monte Carlo Search AI", FourPlay.MonteCarloSearchAI)]
+
     def __init__(self):
         super(QFourPlay, self).__init__()
         self.fourPlay = None
@@ -314,112 +306,127 @@ class QFourPlay(QWidget):
 
     def initGame(self):
         self.fourPlay = FourPlay(6, 7)
+        self.fourPlay.ai = self.AIs[0][1](self.fourPlay.ai.symbol)
 
     def initUI(self):
         self.setWindowTitle(self.tr("Fourplay"))
-        layout = QGridLayout()
-        layout.setSpacing(4)
+        layout = QVBoxLayout()
         self.setLayout(layout)
-        playerColorMap = {None: (QPalette.Dark, QPalette.Background),
-                          self.fourPlay.player: (QPalette.Highlight, QPalette.Highlight),
-                          self.fourPlay.ai: (QPalette.Dark, QPalette.Dark)}
+        discGridLayout = QGridLayout()
+        discGridLayout.setSpacing(4)
+        aiComboBox = QComboBox(self)
+        aiComboBox.addItems([self.tr(ai[0]) for ai in self.AIs])
+        aiComboBox.currentIndexChanged.connect(self.selectAIEvent)
+        layout.addWidget(aiComboBox)
+        layout.addLayout(discGridLayout)
 
         for disc in self.fourPlay:
-            button = QFourPlay.QDiscButton(playerColorMap)
-            self.layout().addWidget(button, disc.row, disc.column)
-            button.clicked.connect(lambda _, button=button, disc=disc: button.clickEvent(self, disc))
+            button = QFourPlay.QDiscButton(self)
+            discGridLayout.addWidget(button, disc.row, disc.column)
+            button.clicked.connect(lambda _, button=button, disc=disc: button.clickEvent(disc))
             button.updateEvent(disc)
             disc.delegate = button
 
     def playRound(self, column):
         QApplication.setOverrideCursor(Qt.WaitCursor)
-        gameScore = self.fourPlay.playRound(column)
+        score = self.fourPlay.round(column)
         QApplication.restoreOverrideCursor()
-        if gameScore is not None:
-            if gameScore == +1:
+        if score is not None:
+            if score == +1:
                 QMessageBox.information(self, self.tr("Victory!"), self.tr("You won :)"), QMessageBox.Ok)
-            if gameScore == 0:
+            if score == 0:
                 QMessageBox.warning(self, self.tr("Tie!"), self.tr("You tied :|"), QMessageBox.Ok)
-            if gameScore == -1:
+            if score == -1:
                 QMessageBox.critical(self, self.tr("Defeat!"), self.tr("You lost :("), QMessageBox.Ok)
             self.fourPlay.reset()
+
+    def selectAIEvent(self, index):
+        self.fourPlay.ai = self.AIs[index][1](self.fourPlay.ai.symbol)
 
     def sizeHint(self):
         return QSize(300, 300)
 
 
 class TestFourPlay(unittest.TestCase):
-    def testBasicAI(self):
-        fourPlay = FourPlay.create(["☓☓☓◯☓☓☐",
-                                    "◯◯◯☓◯◯◯",
-                                    "☓☓☓◯☓☓☓",
-                                    "◯◯◯☓◯◯◯",
-                                    "☓☓☓◯☓☓☓",
-                                    "◯◯◯☓◯◯◯"])
+
+    def testBreadthFirstSearchAIBasics(self):
+        fourPlay = FourPlay(6, 7)
+
+        fourPlay.build(["☓☓☓◯☓☓☐",
+                        "◯◯◯☓◯◯◯",
+                        "☓☓☓◯☓☓☓",
+                        "◯◯◯☓◯◯◯",
+                        "☓☓☓◯☓☓☓",
+                        "◯◯◯☓◯◯◯"])
+        fourPlay.ai = FourPlay.BreadthFirstSearchAI(fourPlay.ai.symbol)
         score, disc = fourPlay.ai.play(fourPlay, fourPlay.player)
         self.assertEqual((disc.row, disc.column), (0, 6))
         self.assertEqual(score, 0.0)
 
-        fourPlay = FourPlay.create(["☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "◯◯◯☐☓☓☓"])
-        score, disc = fourPlay.ai.play(fourPlay, fourPlay.player)
-        self.assertEqual((disc.row, disc.column), (5, 3))
-        self.assertEqual(score, 1.0)
-
-        fourPlay = FourPlay.create(["☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "◯◯◯☐☓☓☐"])
+        fourPlay = FourPlay(6, 7)
+        fourPlay.build(["☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "◯◯◯☐☓☓☓"])
+        fourPlay.ai = FourPlay.BreadthFirstSearchAI(fourPlay.ai.symbol)
         score, disc = fourPlay.ai.play(fourPlay, fourPlay.player)
         self.assertEqual((disc.row, disc.column), (5, 3))
 
-        fourPlay = FourPlay.create(["☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "◯☐☐☐☐☐☐",
-                                    "◯☐☐☐☓☐☐",
-                                    "◯☐☐☓☓☐☐"])
+        fourPlay.build(["☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "◯◯◯☐☓☓☐"])
+        fourPlay.ai = FourPlay.BreadthFirstSearchAI(fourPlay.ai.symbol)
+        score, disc = fourPlay.ai.play(fourPlay, fourPlay.player)
+        self.assertEqual((disc.row, disc.column), (5, 3))
+
+        fourPlay.build(["☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "◯☐☐☐☐☐☐",
+                        "◯☐☐☐☓☐☐",
+                        "◯☐☐☓☓☐☐"])
+        fourPlay.ai = FourPlay.BreadthFirstSearchAI(fourPlay.ai.symbol)
         score, disc = fourPlay.ai.play(fourPlay, fourPlay.player)
         self.assertEqual((disc.row, disc.column), (2, 0))
 
-        fourPlay = FourPlay.create(["☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "◯◯☐☐☐☐☐",
-                                    "◯☓◯☐☐☐☐",
-                                    "◯☓☓◯☓☓☓"])
+        fourPlay.build(["☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "◯◯☐☐☐☐☐",
+                        "◯☓◯☐☐☐☐",
+                        "◯☓☓◯☓☓☓"])
+        fourPlay.ai = FourPlay.BreadthFirstSearchAI(fourPlay.ai.symbol)
         score, disc = fourPlay.ai.play(fourPlay, fourPlay.player)
         self.assertEqual((disc.row, disc.column), (2, 0))
 
-        fourPlay = FourPlay.create(["☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "☐☐☐☐☐☐☐",
-                                    "☓☐☐☐☐☐☐",
-                                    "☓☐☐☐☐☐☐",
-                                    "◯◯◯☐☐☐☐"])
+        fourPlay.build(["☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "☐☐☐☐☐☐☐",
+                        "☓☐☐☐☐☐☐",
+                        "☓☐☐☐☐☐☐",
+                        "◯◯◯☐☐☐☐"])
+        fourPlay.ai = FourPlay.BreadthFirstSearchAI(fourPlay.ai.symbol)
         score, disc = fourPlay.ai.play(fourPlay, fourPlay.player)
         self.assertEqual((disc.row, disc.column), (5, 3))
 
     def testAIvsAI(self):
         fourPlay = FourPlay(6, 7)
-        x = FourPlay.AI("☓")
-        o = FourPlay.AI("◯")
-
+        x = FourPlay.BreadthFirstSearchAI("☓")
+        o = FourPlay.BreadthFirstSearchAI("◯")
         while True:
             _, disc = x.play(fourPlay, o)
-            disc.set(x)
-            score = disc.score(fourPlay, x)
+            fourPlay.set(disc, x)
+            score = fourPlay.score(disc)
             if score is not None:
                 break
             _, disc = o.play(fourPlay, x)
-            disc.set(o)
-            score = disc.score(fourPlay, o)
+            fourPlay.set(disc, o)
+            score = fourPlay.score(disc)
             if score is not None:
                 score = -score
                 break

@@ -37,8 +37,9 @@ __Details__: [Wikipedia](https://en.wikipedia.org/wiki/Tetris)
 
 
 ## Fourplay - `fourplay.py`
-Logical game for two with a quite-hard (but not impossible) to beat AI. The algorithm uses a version of
-[depth-first-search](https://en.wikipedia.org/wiki/Depth-first_search) which does branch pruning of obviously wrong choices for speed-up. The AI looks 8 moves ahead.
+Logical game for two with a two quite-hard (but not impossible) to beat AI. One algorithm uses
+[depth-first-search](https://en.wikipedia.org/wiki/Depth-first_search) which does branch pruning of obviously wrong
+choices for speed-up and looks 8 moves ahead. The second one does monte-carlo-search[depth-first-search](https://en.wikipedia.org/wiki/Depth-first_search)
 
 __How to play__: Form a straight line out of four dots!
 
