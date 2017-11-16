@@ -38,8 +38,8 @@ __Details__: [Wikipedia](https://en.wikipedia.org/wiki/Tetris)
 
 ## Fourplay - `fourplay.py`
 Logical game for two with a two quite-hard (but not impossible) to beat AI. One algorithm uses
-[depth-first-search](https://en.wikipedia.org/wiki/Depth-first_search) which does branch pruning of obviously wrong
-choices for speed-up and looks 8 moves ahead. The second one does monte-carlo-search[depth-first-search](https://en.wikipedia.org/wiki/Depth-first_search)
+[depth first search](https://en.wikipedia.org/wiki/Depth-first_search) which does branch pruning of obviously wrong
+choices for speed-up and looks 8 moves ahead. The second one performs [monte carlo tree search](https://en.wikipedia.org/wiki/Monte_Carlo_tree_search).
 
 __How to play__: Form a straight line out of four dots!
 
@@ -73,8 +73,8 @@ __Details__: [Wikipedia](https://en.wikipedia.org/wiki/Microsoft_Minesweeper)
 
 
 ## Tic-Tac-Toe - `tictactoe.py`
-Oldie but goodie 3 by 3 noughts against crosses. Peppered up with a simple but never-losing AI. Good luck trying to
-beat it!
+Oldie but goodie 3 by 3 noughts against crosses. Peppered up with a simple AI. Good luck trying to beat it ;) You can
+choose between [DFS](https://en.wikipedia.org/wiki/Depth-first_search) and [MCTS](https://en.wikipedia.org/wiki/Monte_Carlo_tree_search) opponents.
 
 __How to play__: Get three ◯s or ☓s in a row!
 
