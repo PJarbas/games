@@ -73,7 +73,7 @@ class TicTacToe:
 
         def play(self, ticTacToe):
 
-            def getUnvisited(ticTacToe):
+            def unvisitedTiles(ticTacToe):
                 retval = []
                 for tile in ticTacToe.choices():
                     ticTacToe.set(tile)
@@ -82,39 +82,27 @@ class TicTacToe:
                     ticTacToe.clear(tile)
                 return retval
 
-            def getBest(ticTacToe):
-                bestUlp, bestTile = -math.inf, None
-                (_, parentVisits, _) = self.scores[str(ticTacToe)]
+            def optimalTile(ticTacToe, criterium):
+                bestCriterium, bestTile = None, None
                 for tile in ticTacToe.choices():
                     ticTacToe.set(tile)
                     if str(ticTacToe) in self.scores:
                         (wins, visits, _) = self.scores[str(ticTacToe)]
-                        ulp = wins / visits + 1.0 * math.sqrt(math.log(parentVisits) / visits)
-                        if bestUlp <= ulp:
-                            bestUlp, bestTile = ulp, tile
-                    ticTacToe.clear(tile)
-                return bestTile
-
-            def getWorst(ticTacToe):
-                bestUlp, bestTile = math.inf, None
-                (_, parentVisits, _) = self.scores[str(ticTacToe)]
-                for tile in ticTacToe.choices():
-                    ticTacToe.set(tile)
-                    if str(ticTacToe) in self.scores:
-                        (wins, visits, _) = self.scores[str(ticTacToe)]
-                        ulp = wins / visits - 1.0 * math.sqrt(math.log(parentVisits) / visits)
-                        if bestUlp >= ulp:
-                            bestUlp, bestTile = ulp, tile
+                        if bestCriterium is None or bestCriterium <= criterium(wins, visits):
+                            bestCriterium, bestTile = criterium(wins, visits), tile
                     ticTacToe.clear(tile)
                 return bestTile
 
             def select(ticTacToe):
-                unvisited = getUnvisited(ticTacToe)
+                (parentWins, parentVisits, parentTile) = self.scores[str(ticTacToe)]
+                scoreULP = lambda wins, visits: (wins / visits) + 0.3 * math.sqrt(math.log(parentVisits) / visits)
+
+                unvisited = unvisitedTiles(ticTacToe)
                 if not unvisited:
                     if ticTacToe.next == self:
-                        bestTile = getBest(ticTacToe)
+                        bestTile = optimalTile(ticTacToe, criterium=lambda *args: + scoreULP(*args))
                     else:
-                        bestTile = getWorst(ticTacToe)
+                        bestTile = optimalTile(ticTacToe, criterium=lambda *args: - scoreULP(*args))
                     ticTacToe.set(bestTile)
                     score = ticTacToe.score(bestTile, self)
                     if score is None:
@@ -134,6 +122,7 @@ class TicTacToe:
                 tile = random.choice(ticTacToe.choices())
                 ticTacToe.set(tile)
                 score = ticTacToe.score(tile, self)
+                score = 0 if score == -1 else score
                 if score is None:
                     score = playout(ticTacToe)
                 ticTacToe.clear(tile)
@@ -150,22 +139,13 @@ class TicTacToe:
             (wins, visits, tile) = self.scores.get(str(ticTacToe), (0, 0, None))
             self.scores[str(ticTacToe)] = (wins, visits, None)
 
-            repeat = 100
+            repeat = 1000
             while repeat > 0:
                 score = select(ticTacToe)
                 backpropagate(ticTacToe, score)
                 repeat -= 1
 
-            if str(ticTacToe) not in self.scores:
-                return ticTacToe
-            maxVisits, maxTile = -math.inf, None
-            for tile in ticTacToe.choices():
-                ticTacToe.set(tile)
-                (_, visits, _) = self.scores[str(ticTacToe)]
-                if maxVisits <= visits:
-                    maxVisits, maxTile = visits, tile
-                ticTacToe.clear(tile)
-            return maxVisits, maxTile
+            return 0, optimalTile(ticTacToe, criterium=lambda wins, visits: visits)
 
         def reset(self):
             self.scores.clear()
@@ -186,6 +166,12 @@ class TicTacToe:
 
     def __iter__(self):
         return iter(self.tiles.values())
+
+    def __hash__(self):
+        return hash(str(self))
+
+    def __eq__(self, other):
+        return str(self) == str(other)
 
     def __repr__(self):
         string = ""
@@ -399,6 +385,12 @@ class TestTicTacToe(unittest.TestCase):
                          "☐◯☓"], next=ticTacToe.ai)
         score, tile = ticTacToe.ai.play(ticTacToe)
         self.assertEqual((tile.row, tile.column), (2, 0))
+
+        ticTacToe.build(["☐☐☐",
+                         "☐◯☐",
+                         "☐◯☓"], next=ticTacToe.ai)
+        score, tile = ticTacToe.ai.play(ticTacToe)
+        self.assertEqual((tile.row, tile.column), (0, 1))
 
     def testBreadthFirstSearchAIvsAI(self):
         o = TicTacToe.BreadthFirstSearchAI("◯")
