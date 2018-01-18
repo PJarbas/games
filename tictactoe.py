@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QGridLayout, QMessageBox, QSizePolicy, QVBoxLayout, QComboBox
 from PyQt5.QtCore import Qt, QSize
+import networkx as nx
 import unittest
 import random
 import math
@@ -74,127 +75,80 @@ class TicTacToe:
     class MonteCarloSearchAI(Player):
         def __init__(self, symbol):
             super().__init__(symbol)
-            self.scores = {}
+            self.graph = nx.DiGraph()
 
         def play(self, ticTacToe):
 
-            def unvisitedTiles(ticTacToe):
-                retval = []
-                for tile in ticTacToe.choices():
-                    ticTacToe.set(tile)
-                    if str(ticTacToe) not in self.scores:
-                        retval.append(tile)
-                    ticTacToe.clear(tile)
-                return retval
+            def ulp_score(node, succ_node):
+                node, succ_node = self.graph.node[node], self.graph.node[succ_node]
+                return succ_node['num_wins'] / succ_node['num_visits'] + \
+                       1.0 * math.sqrt(math.log(node['num_visits']) / succ_node['num_visits'])
 
-            def optimalTile(ticTacToe, criterium):
-                bestCriterium, bestTile = None, None
-                for tile in ticTacToe.choices():
-                    ticTacToe.set(tile)
-                    if str(ticTacToe) in self.scores:
-                        (wins, visits, _) = self.scores[str(ticTacToe)]
-                        if bestCriterium is None or bestCriterium <= criterium(wins, visits):
-                            bestCriterium, bestTile = criterium(wins, visits), tile
-                    ticTacToe.clear(tile)
-                return bestTile
+            def select(node):
+                if self.graph.successors(node):
+                    succ_ulp_scores = [(succ_node, ulp_score(node, succ_node)) for succ_node in self.graph.successors(node)]
+                    succ_node = max(succ_ulp_scores, key=lambda tpl: tpl[1])[0]
+                    ticTacToe.set(self.graph.edge[node][succ_node]['move'])
+                    return select(succ_node)
+                return node
 
-            def select(ticTacToe):
-                (parentWins, parentVisits, parentTile) = self.scores[str(ticTacToe)]
-                scoreULP = lambda wins, visits: (wins / visits) + 1.0 * math.sqrt(math.log(parentVisits) / visits)
-
-                unvisited = unvisitedTiles(ticTacToe)
-                if not unvisited:
-                    bestTile = optimalTile(ticTacToe, criterium=lambda *args: + scoreULP(*args))
-                    ticTacToe.set(bestTile)
-                    score = ticTacToe.score(bestTile)
+            def expand(node):
+                if self.graph.node[node]['score'] is None:
+                    for move in ticTacToe.choices():
+                        ticTacToe.set(move)
+                        succ_node, score = str(ticTacToe), ticTacToe.score(move)
+                        self.graph.add_node(succ_node, attr_dict={'score': score, 'num_visits': 1, 'num_wins': 0})
+                        self.graph.add_edge(node, succ_node, attr_dict={'move': move})
+                        ticTacToe.clear(move)
+                    playout_move = random.choice(ticTacToe.choices())
+                    ticTacToe.set(playout_move)
+                    score = ticTacToe.score(playout_move)
                     if score is None:
-                        return select(ticTacToe)
-                    else:
-                        return ticTacToe.previousPlayer, score
-                else:
-                    expandTile = random.choice(unvisited)
-                    expandTile = unvisited[0]
-                    ticTacToe.set(expandTile)
-                    if str(ticTacToe) in self.scores:
-                        (wins, visits, tiles) = self.scores[str(ticTacToe)]
-                        tiles.append(expandTile)
-                    else:
-                        self.scores[str(ticTacToe)] = (0, 0, [expandTile])
-                    winner = ticTacToe.previousPlayer
-                    score = ticTacToe.score(expandTile)
-                    if score is None:
-                        winner, score = playout(ticTacToe)
-                    return winner, score
+                        score = playout()
+                    return score
+                return self.graph.node[node]['score']
 
-            def playout(ticTacToe):
-                tile = random.choice(ticTacToe.choices())
-                ticTacToe.set(tile)
-                winner = ticTacToe.previousPlayer
-                score = ticTacToe.score(tile)
+            def playout():
+                playout_move = random.choice(ticTacToe.choices())
+                ticTacToe.set(playout_move)
+                score = ticTacToe.score(playout_move)
                 if score is None:
-                    winner = playout(ticTacToe)
-                ticTacToe.clear(tile)
-                return winner, score
+                    score = playout()
+                ticTacToe.clear(playout_move)
+                return score
 
-            def backpropagate(ticTacToe, winner, score):
-                (wins, visits, tiles) = self.scores[str(ticTacToe)]
-                wins = wins + score if winner == ticTacToe.previousPlayer else wins
-                self.scores[str(ticTacToe)] = (wins, visits + 1, tiles)
-                if tiles:
-                    for tile in tiles:
-                        ticTacToe.clear(tile)
-                        backpropagate(ticTacToe, winner, score)
-                        ticTacToe.set(tile)
-                    ticTacToe.clear(tiles[0])
+            def backpropagate(node, score):
+                self.graph.node[node]['num_visits'] += 1
+                self.graph.node[node]['num_wins'] += score
+                if self.graph.predecessors(node):
+                    pred_node = self.graph.predecessors(node)[0]
+                    ticTacToe.clear(self.graph.edge[pred_node][node]['move'])
+                    backpropagate(pred_node, score)
 
-            (wins, visits, tile) = self.scores.get(str(ticTacToe), (0, 0, None))
-            self.scores[str(ticTacToe)] = (wins, visits, None)
+            repeat = 100
+            if str(ticTacToe) not in self.graph:
+                self.graph.add_node(str(ticTacToe), attr_dict={'score': None, 'num_visits': 0, 'num_wins': 0})
+            root_node = str(ticTacToe)
 
-            repeat = 1000
             while repeat > 0:
-                winner, score = select(ticTacToe)
-                backpropagate(ticTacToe, winner, score)
+                selected_node = select(root_node)
+                score = expand(selected_node)
+                backpropagate(str(ticTacToe), score)
                 repeat -= 1
 
-            graph = self.visualize(ticTacToe)
-            graph.draw("graph.png", prog="dot")
-            return 0, optimalTile(ticTacToe, criterium=lambda wins, visits: visits)
+
+            succ_visits = [(succ_node, self.graph.node[succ_node]['num_visits']) for succ_node in self.graph.successors(root_node)]
+            succ_node = max(succ_visits, key=lambda tpl: tpl[1])[0]
+            return 0, self.graph.edge[root_node][succ_node]['move']
 
         def visualize(self, ticTacToe):
-            from pygraphviz import AGraph
-            graph = AGraph(name='Tic-Tac-Toe', directed=True)
-            graph.graph_attr['label'] = 'Tic-Tac-Toe'
-            graph.node_attr['style'] = 'filled'
-
-            def traverse(ticTacToe):
-                for choice in ticTacToe.choices():
-                    ticTacToe.set(choice)
-                    if str(ticTacToe) in self.scores:
-                        strCurrent = str(ticTacToe)
-                        (currentWins, currentVisits, currentTiles) = self.scores[str(ticTacToe)]
-                        if currentTiles:
-                            for tile in currentTiles:
-                                ticTacToe.clear(tile)
-                                (_, visits, _) = self.scores[str(ticTacToe)]
-                                graph.add_edge(str(ticTacToe), strCurrent, label=tile, weight=visits)
-                                if ticTacToe.previousPlayer == self:
-                                    graph.get_node(str(ticTacToe)).attr['fillcolor'] = 'gray'
-                                    graph.get_node(strCurrent).attr['fillcolor'] = 'white'
-
-                                else:
-                                    graph.get_node(str(ticTacToe)).attr['fillcolor'] = 'white'
-                                    graph.get_node(strCurrent).attr['fillcolor'] = 'gray'
-                                ticTacToe.set(tile)
-                            traverse(ticTacToe)
-                    ticTacToe.clear(choice)
-
-            for strTicTacToe, (wins, visits, tiles) in self.scores.items():
-                graph.add_node(strTicTacToe, label="{:s}{:d}|{:d}".format(strTicTacToe, wins, visits))
-            traverse(ticTacToe)
-            return graph
+            import matplotlib.pyplot as plt
+            position = nx.nx_agraph.graphviz_layout(self.graph, prog='dot')
+            nx.draw(self.graph, position, with_labels=True, font_weight='bold')
+            plt.show()
 
         def reset(self):
-            self.scores.clear()
+            self.graph.clear()
 
     def __init__(self, player, ai):
         super().__init__()
