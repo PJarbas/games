@@ -29,7 +29,7 @@ class TicTacToe(dict):
 
         def notify(self):
             if self.delegate is not None:
-                self.delegate.updateEvent(self)
+                self.delegate.marked(self)
 
     class Player:
         def __init__(self, symbol: str, tictactoe: 'TicTacToe'=None):
@@ -73,29 +73,24 @@ class TicTacToe(dict):
         return string
 
     @classmethod
-    def build(cls, scenario: List[str], o: 'TicTacToe.Player', x: 'TicTacToe.Player',
-              next: 'TicTacToe.Player') -> 'TicTacToe':
+    def build(cls, scenario: List[str], o: 'TicTacToe.Player', x: 'TicTacToe.Player') -> 'TicTacToe':
         tictactoe = cls(o, x)
         symbol_map = {tictactoe.o.symbol: tictactoe.o, tictactoe.x.symbol: tictactoe.x}
         for row, scenario_row in enumerate(scenario):
             for column, symbol in enumerate(scenario_row):
                 disc = tictactoe[row, column]
                 disc.player = symbol_map.get(symbol, None)
-        if next is not None:
-            tictactoe.next = next
         return tictactoe
 
     def set(self, tile, notify=False):
-        if tile.player is not None:
-            raise RuntimeError("Inconsistent TicTacToe state")
+        assert tile.player is None
         tile.player = self.next
         self.next = self.o if self.next == self.x else self.x
         if notify is True:
             tile.notify()
 
     def unset(self, tile: 'TicTacToe.Tile', notify: bool=False):
-        if tile.player is None:
-            raise RuntimeError("Inconsistent TicTacToe state")
+        assert tile.player is not None
         tile.player = None
         self.next = self.o if self.next == self.x else self.x
         if notify is True:
@@ -130,7 +125,7 @@ class TicTacToe(dict):
         self.set(o_tile, notify)
         o_score = self.score(o_tile)
         if o_score is not None:
-            return o_score
+            return +o_score
 
         x_tile = self.x.play()
         assert x_tile in self.choices()

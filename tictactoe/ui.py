@@ -4,12 +4,12 @@ from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QResizeEvent
 
 from tictactoe import TicTacToe
-from ai import BreadthFirstSearchAI, MonteCarloSearchAI
+from ai import BreadthFirstSearchAI
 
 
 class QTicTacToe(QWidget):
     class QTileButton(QPushButton):
-        SymbolMap = {'-': "", 'O': "◯", 'X': "☓", '+': "☩"}
+        SymbolMap = {'-': " ", 'O': "◯", 'X': "☓"}
 
         def __init__(self, parent):
             super(QTicTacToe.QTileButton, self).__init__(parent)
@@ -20,7 +20,7 @@ class QTicTacToe(QWidget):
         def clickEvent(self, tile: TicTacToe.Tile):
             self.parent().round(tile)
 
-        def updateEvent(self, tile: TicTacToe.Tile):
+        def marked(self, tile: TicTacToe.Tile):
             self.setEnabled(tile.player is None)
             self.setText(self.SymbolMap[str(tile)])
             self.update()
@@ -40,8 +40,7 @@ class QTicTacToe(QWidget):
         def play(self):
             return self.tile
 
-    AIs = {"Breadth First Search AI": BreadthFirstSearchAI,
-           "Monte Carlo Search AI": MonteCarloSearchAI}
+    AIs = {"Breadth First Search AI": BreadthFirstSearchAI}
 
     def __init__(self):
         super(QTicTacToe, self).__init__()
@@ -90,8 +89,8 @@ class QTicTacToe(QWidget):
             self.ticTacToe.reset(True)
 
     def selectAI(self, name: str):
-        ArtificialInteligence = QTicTacToe.AIs[name]
-        self.ai = ArtificialInteligence(self.fourPlay, self.ai.symbol)
+        ArtificialIntelligence = QTicTacToe.AIs[name]
+        self.ai = ArtificialIntelligence(self.fourPlay, self.ai.symbol)
         self.ticTacToe.x = self.ai
 
     def sizeHint(self) -> QSize:
