@@ -134,8 +134,8 @@ class QFourPlay(QWidget):
             self.fourPlay.reset(True)
 
     def selectAI(self, name: str):
-        ArtificialInteligence = QFourPlay.AIs[name]
-        self.ai = ArtificialInteligence(self.fourPlay, self.ai.symbol)
+        ArtificialIntelligence = QFourPlay.AIs[name]
+        self.ai = ArtificialIntelligence(self.fourPlay, self.ai.symbol)
         self.fourPlay.x = self.ai
 
     def sizeHint(self) -> QSize:

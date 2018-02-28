@@ -19,7 +19,7 @@ class FourPlay(dict):
                 return (self.row, self.column) == (other.row, other.column)
 
         def __str__(self):
-            return "-" if self.player is None else str(self.player)
+            return '-' if self.player is None else str(self.player)
 
         def mark(self, notify: bool=False):
             self.marked = True
@@ -107,7 +107,7 @@ class FourPlay(dict):
             self.symbol = symbol
 
         def __str__(self):
-            return str(self.symbol)
+            return self.symbol
 
         def play(self) -> 'FourPlay.Disc':
             raise NotImplementedError()
@@ -154,11 +154,13 @@ class FourPlay(dict):
         return fourplay
 
     def set(self, disc: 'FourPlay.Disc', player: 'FourPlay.Player', notify: bool=False):
+        assert disc.player is None
         disc.player = player
         self.frontier.increase(disc.column, notify)
         disc.notify(notify)
 
     def unset(self, disc: 'FourPlay.Disc', notify: bool=False):
+        assert disc.player is not None
         disc.player = None
         self.frontier.decrease(disc.column, notify)
         disc.notify(notify)
@@ -181,7 +183,7 @@ class FourPlay(dict):
         if o_score is not None:
             if notify:
                 self.highlight(o_disc)
-            return o_score
+            return +o_score
 
         x_disc = self.x.play()
         assert x_disc in self.frontier

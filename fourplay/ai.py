@@ -1,5 +1,5 @@
 import unittest
-from typing import List
+from typing import Tuple, List, Optional
 
 from fourplay import FourPlay
 
@@ -7,35 +7,39 @@ from fourplay import FourPlay
 class BreadthFirstSearchAI(FourPlay.Player):
 
     def play(self) -> FourPlay.Disc:
-        opponent = self.fourplay.x if self == self.fourplay.o else self.fourplay.o
-        result, move = self._play(opponent)
-        return move
-
-    def _play(self, opnt: FourPlay.Player, self_best_result: tuple=(-2, None),
-              opnt_best_result: tuple=(+2, None), recursion_level: int=1):
-        recursion_limit = 8
-        for disc in self.fourplay.frontier.choices(shuffle=True):
-            self.fourplay.set(disc, self)
-            self_result = (self.fourplay.score(disc), disc)
-            if self_result[0] is None:
-                if recursion_level < recursion_limit:
-                    subtree_self_best_result = (-self_best_result[0], self_best_result[1])
-                    subtree_opnt_best_result = (-opnt_best_result[0], opnt_best_result[1])
-                    opnt_result = BreadthFirstSearchAI._play(opnt, self, subtree_opnt_best_result,
-                                                             subtree_self_best_result, recursion_level + 1)
-                    self_result = (-opnt_result[0], self_result[1])
+        def recursive_best(fourplay: FourPlay, myself: FourPlay.Player, opponent: FourPlay.Player,
+                           myself_best_result: Tuple[int, Optional[FourPlay.Disc]]=(-2, None),
+                           opponent_best_result: Tuple[int, Optional[FourPlay.Disc]]=(+2, None),
+                           recursion_level: int=1):
+            recursion_limit = 8
+            for disc in fourplay.frontier.choices(shuffle=True):
+                fourplay.set(disc, myself)
+                myself_result = (fourplay.score(disc), disc)
+                if myself_result[0] is None:
+                    if recursion_level < recursion_limit:
+                        subtree_myself_best_result = (-myself_best_result[0], myself_best_result[1])
+                        subtree_opponent_best_result = (-opponent_best_result[0], opponent_best_result[1])
+                        opponent_result = recursive_best(fourplay, opponent, myself,
+                                                         subtree_opponent_best_result,
+                                                         subtree_myself_best_result,
+                                                         recursion_level + 1)
+                        myself_result = (-opponent_result[0], myself_result[1])
+                    else:
+                        myself_result = (-1 / recursion_limit, myself_result[1])
                 else:
-                    self_result = (-1 / recursion_limit, self_result[1])
-            else:
-                self_result = (self_result[0] / recursion_level, self_result[1])
-            self.fourplay.unset(disc)
+                    myself_result = (myself_result[0] / recursion_level, myself_result[1])
+                fourplay.unset(disc)
 
-            if self_result[0] > self_best_result[0]:
-                self_best_result = self_result
-            if opnt_best_result[0] <= self_best_result[0]:
-                break
+                if myself_result[0] > myself_best_result[0]:
+                    myself_best_result = myself_result
+                if opponent_best_result[0] <= myself_best_result[0]:
+                    break
 
-        return self_best_result
+            return myself_best_result
+
+        opponent = self.fourplay.x if self == self.fourplay.o else self.fourplay.o
+        best_result, best_disc = recursive_best(self.fourplay, self, opponent)
+        return best_disc
 
 
 class TestBreadthFirstSearchAI(unittest.TestCase):
@@ -84,19 +88,19 @@ class TestBreadthFirstSearchAI(unittest.TestCase):
         row, line = row_line_with_char[0]
         return row, line.find(char)
 
-    def play(self, scenario: List[str]):
-        ai = BreadthFirstSearchAI(None, 'X')
-        fourplay = FourPlay.build(scenario, o=None, x=ai)
-        move = ai.play()
+    def play(self, scenario: List[str], x: FourPlay.Player):
+        fourplay = FourPlay.build(scenario, o=None, x=x)
+        disc = x.play()
         correct = self.find(scenario, '#')
-        self.assertEqual((move.row, move.column), correct)
+        self.assertEqual((disc.row, disc.column), correct)
 
     def test_basics(self):
-        self.play(self.Situations['Finish'])
-        self.play(self.Situations['EasyWin'])
-        self.play(self.Situations['DontScrewUp'])
-        self.play(self.Situations['DontMessUp'])
-        self.play(self.Situations['DontF__kUp'])
+        ai = BreadthFirstSearchAI(None, 'X')
+        self.play(self.Situations['Finish'], x=ai)
+        self.play(self.Situations['EasyWin'], x=ai)
+        self.play(self.Situations['DontScrewUp'], x=ai)
+        self.play(self.Situations['DontMessUp'], x=ai)
+        self.play(self.Situations['DontF__kUp'], x=ai)
 
     def test_ai_vs_ai(self):
         o, x = BreadthFirstSearchAI('O'), BreadthFirstSearchAI('X')
